@@ -1,5 +1,4 @@
 import os
-import sys
 import time
 import telegram
 import telegram.ext
@@ -12,15 +11,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-formatter = logging.Formatter(
-    '%(asctime)s - %(lineno)d - %(funcName)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-handler = logging.StreamHandler(sys.stdout)
-logger.addHandler(handler)
-handler.setFormatter(formatter)
-
+if __name__ == '__main__':
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format=('%(asctime)s, %(lineno)d, %(funcName)s,'
+                '%(levelname)s, %(message)s')
+    )
 
 PRACTICUM_TOKEN = os.getenv('YA_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELE_TOKEN')
@@ -40,25 +36,31 @@ HOMEWORK_VERDICTS = {
 
 def send_message(bot, message):
     """Функция для отправки сообщения ботом."""
-    logger.debug(f'Попытка отправить сообщение: {message}')
+    logging.debug(f'Попытка отправить сообщение: {message}')
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
     except Exception as error:
         raise Exception(f'Сообщение "{message}" не отправлено из-за {error}')
     else:
-        logger.info(f'Сообщение "{message}" отправлено')
+        logging.info(f'Сообщение "{message}" отправлено')
 
 
 def get_api_answer(current_timestamp):
     """Функция для запроса ресурса с API Практикума."""
-    logger.debug('Поптыка запроса ресурса с API Практикума')
+    logging.debug('Поптыка запроса ресурса с API Практикума')
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
+    request_params = {
+        'url': ENDPOINT,
+        'headers': HEADERS,
+        'params': params
+    }
     try:
-        response = requests.get(ENDPOINT, headers=HEADERS, params=params)
+        response = requests.get(**request_params)
         if response.status_code != HTTPStatus.OK:
             raise Exception(
-                f'Ответ от {ENDPOINT} отличный от "200" с параметрами {params}'
+                f'Ответ от API отличный от "200" с параметрами'
+                f'{request_params.values()}'
             )
     except Exception as error:
         raise Exception(f'Ошибка доступа к API: {error}')
@@ -67,11 +69,11 @@ def get_api_answer(current_timestamp):
 
 def check_response(response):
     """Функция для проверки формата ответа от API Практикума."""
-    logger.debug('Проверка формата ответа от API')
+    logging.debug('Проверка формата ответа от API')
     if not isinstance(response, dict):
         raise TypeError('Ошибка типа')
     if 'homeworks' not in response or 'current_date' not in response:
-        logger.error('Ошибка доступа по ключу')
+        logging.error('Ошибка доступа по ключу')
         raise KeyError('Отсутствует Один из ключей')
     homeworks = response.get('homeworks')
     if not isinstance(homeworks, list):
@@ -83,11 +85,11 @@ def parse_status(homework):
     """Определение статуса домашней работы."""
     if homework is {}:
         raise Exception('Домашних работ не найдено')
-    logger.debug('Поптыка определения статуса домашней работы')
+    logging.debug('Поптыка определения статуса домашней работы')
     keys = ['homework_name', 'status']
     for key in keys:
         if key not in homework.keys():
-            logger.error(f'В ответе API не обнаружен ключ "{key}"')
+            logging.error(f'В ответе API не обнаружен ключ "{key}"')
             raise KeyError('Не обнаружены необходимые ключи в ответе API')
     homework_status = homework['status']
     try:
@@ -102,19 +104,19 @@ def parse_status(homework):
 
 def check_tokens() -> bool:
     """Функция для проверки доступности переменных окружения."""
-    logger.debug('Проверка доступности переменных окружения')
+    logging.debug('Проверка доступности переменных окружения')
     return all((PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID))
 
 
 def main():
     """Основная логика работы бота."""
-    logger.debug('Бот запущен')
+    logging.debug('Бот запущен')
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
     prev_report = {}
     prev_err_message = ''
     if not check_tokens():
-        logger.critical('Недоступны переменные окружения')
+        logging.critical('Недоступны переменные окружения')
         raise TokensAreNotGiven
     while True:
         try:
@@ -128,11 +130,11 @@ def main():
                     prev_report = homeworks.copy()
                 current_timestamp = response.get('current_date')
             else:
-                logger.debug('Нет новых статусов домашних работ')
+                logging.debug('Нет новых статусов домашних работ')
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
             if message != prev_err_message:
-                logger.error(message)
+                logging.error(message)
                 send_message(bot, message)
                 prev_err_message = message
         time.sleep(RETRY_TIME)
